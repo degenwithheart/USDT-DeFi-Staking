@@ -1,42 +1,110 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
-import { ethers } from 'ethers'
-import CONTRACT_ADDRESS from '../lib/contract'
-import usdtAbi from '../lib/usdtABI.json'
+// context/Web3Context.js
+import React, { createContext, useEffect, useState } from 'react';
+import Web3 from 'web3';
+import WalletConnectProvider from '@walletconnect/web3-provider';
+import usdtABI from '../lib/usdtABI.json';
+import stakingABI from '../lib/stakingABI.json';
 
-const Web3Context = createContext()
-export const useWeb3 = () => useContext(Web3Context)
+export const Web3Context = createContext();
 
 export const Web3Provider = ({ children }) => {
-  const [provider, setProvider] = useState()
-  const [signer, setSigner] = useState()
-  const [address, setAddress] = useState()
-  const [contract, setContract] = useState()
-  const [error, setError] = useState()
+  const [web3, setWeb3] = useState(null);
+  const [account, setAccount] = useState(null);
+  const [usdtContract, setUsdtContract] = useState(null);
+  const [stakingContract, setStakingContract] = useState(null);
+  const [provider, setProvider] = useState(null);
 
-  const init = async () => {
-    if (!window.ethereum) {
-      setError('MetaMask not detected. Please install it.')
-      return
-    }
-    try {
-      const eth = window.ethereum
-      const web3Provider = new ethers.providers.Web3Provider(eth)
-      setProvider(web3Provider)
-      const accounts = await web3Provider.send('eth_requestAccounts', [])
-      setAddress(accounts[0])
-      const s = web3Provider.getSigner()
-      setSigner(s)
-      setContract(new ethers.Contract(CONTRACT_ADDRESS, usdtAbi, s))
-    } catch (e) {
-      setError(e.message)
-    }
-  }
+  const usdtAddress = process.env.NEXT_PUBLIC_USDT_CONTRACT_ADDRESS;
+  const stakingAddress = process.env.NEXT_PUBLIC_STAKING_CONTRACT_ADDRESS;
+  const targetNetworkId = '0x1'; // Ethereum Mainnet
 
-  useEffect(() => { init() }, [])
+  const initWeb3 = async (prov) => {
+    const web3Instance = new Web3(prov);
+    setWeb3(web3Instance);
+
+    const accounts = await web3Instance.eth.getAccounts();
+    setAccount(accounts[0]);
+
+    const usdt = new web3Instance.eth.Contract(usdtABI, usdtAddress);
+    setUsdtContract(usdt);
+
+    const staking = new web3Instance.eth.Contract(stakingABI, stakingAddress);
+    setStakingContract(staking);
+  };
+
+  const connectWallet = async () => {
+    let prov;
+
+    if (window.ethereum) {
+      prov = window.ethereum;
+      try {
+        await prov.request({ method: 'eth_requestAccounts' });
+        await ensureCorrectNetwork(prov);
+      } catch (err) {
+        console.error('User denied wallet connection', err);
+        return;
+      }
+    } else {
+      prov = new WalletConnectProvider({
+        rpc: {
+          1: 'https://mainnet.infura.io/v3/YOUR_INFURA_KEY',
+        },
+      });
+      await prov.enable();
+    }
+
+    setProvider(prov);
+    await initWeb3(prov);
+  };
+
+  const disconnectWallet = async () => {
+    setAccount(null);
+    setWeb3(null);
+    setUsdtContract(null);
+    setStakingContract(null);
+
+    if (provider?.disconnect) {
+      await provider.disconnect();
+    }
+
+    setProvider(null);
+    if (window.localStorage.getItem('walletconnect')) {
+      window.localStorage.removeItem('walletconnect');
+    }
+  };
+
+  const ensureCorrectNetwork = async (prov) => {
+    const currentChainId = await prov.request({ method: 'eth_chainId' });
+    if (currentChainId !== targetNetworkId) {
+      try {
+        await prov.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: targetNetworkId }],
+        });
+      } catch (err) {
+        console.error('Network switch failed', err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (window.ethereum && window.ethereum.selectedAddress) {
+      connectWallet();
+    }
+  }, []);
 
   return (
-    <Web3Context.Provider value={{ provider, signer, address, contract, error }}>
+    <Web3Context.Provider
+      value={{
+        web3,
+        account,
+        connectWallet,
+        disconnectWallet,
+        usdtContract,
+        stakingContract,
+      }}
+    >
       {children}
     </Web3Context.Provider>
-  )
-}
+  );
+};
