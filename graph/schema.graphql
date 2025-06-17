@@ -1,0 +1,8 @@
+type StakeTransaction @entity {
+  id: ID!
+  user: Bytes!
+  amount: BigInt!
+  timestamp: BigInt!
+}
+type UnstakeTransaction @entity { id: ID!, user: Bytes!, amount: BigInt!, timestamp: BigInt! }
+type ClaimTransaction @entity { id: ID!, user: Bytes!, reward: BigInt!, timestamp: BigInt! }

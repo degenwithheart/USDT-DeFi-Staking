@@ -1,0 +1,31 @@
+specVersion: 0.0.2
+description: USDT staking subgraph
+repository: ''
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: USDTStaking
+    network: mainnet
+    source:
+      address: "<CONTRACT_ADDRESS>"
+      abi: USDTStaking
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.4
+      language: wasm/assemblyscript
+      entities:
+        - StakeTransaction
+        - UnstakeTransaction
+        - ClaimTransaction
+      abis:
+        - name: USDTStaking
+          file: ../abis/USDTStaking.json
+      eventHandlers:
+        - event: Stake(address,uint256)
+          handler: handleStake
+        - event: Unstake(address,uint256)
+          handler: handleUnstake
+        - event: ClaimReward(address,uint256)
+          handler: handleClaim
+      file: ./src/mapping.ts
